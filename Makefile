@@ -30,10 +30,13 @@ features: panel ## Build the day-ahead feature matrix
 forecast: features ## Walk-forward backtest: naive, SARIMAX, XGBoost
 	$(PY) -m ppa.models.walkforward
 
-backtest: forecast ## Turn forecasts into positions and run the trading backtest
+forecast-ablation: features ## Re-run the walk-forward with weather features removed
+	$(PY) -m ppa.models.walkforward --no-weather
+
+backtest: forecast ## Turn forecasts into a battery schedule and backtest it
 	$(PY) -m ppa.strategy.backtest
 
-report: backtest ## Write reports/metrics.json and reports/report.html
+report: backtest forecast-ablation ## Write reports/metrics.json and reports/report.html
 	$(PY) -m ppa.report.build_report
 
 test: ## Run the test suite (network tests excluded)
@@ -54,4 +57,4 @@ clean: ## Remove derived data and reports (keeps the raw API cache and the venv)
 clean-cache: ## Also drop the raw API cache — next ingest refetches everything
 	rm -rf data/raw/*
 
-.PHONY: help venv ingest panel features forecast backtest report test lint all clean clean-cache
+.PHONY: help venv ingest panel features forecast forecast-ablation backtest report test lint all clean clean-cache

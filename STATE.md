@@ -1,41 +1,42 @@
 # STATE — Power Price Alpha
 
 Living status file. A new session reads this, does the next session, updates this, commits.
-Keep under 100 lines.
 
 ## Current position
-Session 0 complete. Session 9 (repo B's first build session) is next.
+Sessions 0, 9-15 complete. Remaining: session 16 (course notebooks 01-13, CI fixtures).
 
 ## Sessions
 - [x] **0 — Scaffold.** Tree, git, requirements, Makefile, config, CI skeleton, lesson 00.
-- [ ] **9 — Ingest.** Lessons 01–02: Elexon MID, NESO demand, Open-Meteo, retry + parquet cache.
-- [ ] **10 — Panel.** Lessons 03–04: settlement-period calendar, assembly, quality tests.
-- [ ] **11 — EDA + baselines.** Lessons 05–06: seasonality, spikes, regimes; seasonal naive variants.
-- [ ] **12 — Statsmodels.** Lesson 07: OLS + Fourier, SARIMAX, residual diagnostics.
-- [ ] **13 — ML forecaster.** Lessons 08–09: features, XGBoost, walk-forward, leakage tests.
-- [ ] **14 — Scoring.** Lesson 10: **measures the 18% MAE-vs-naive claim**, per regime and per period.
-- [ ] **15 — Strategy.** Lessons 11–12: signals, event-driven backtester with costs and slippage.
-- [ ] **16 — Ship.** Lessons 13–14: risk report, HTML report, CI, RESUME_CLAIMS filled in.
+- [x] **9 — Ingest.** Elexon MID, NESO demand, Open-Meteo, retry + parquet cache.
+- [x] **10 — Panel.** Settlement-period calendar, assembly, quality tests.
+- [x] **11-12 — Baselines + statsmodels.** naive.py (3 variants), sarimax.py (OLS + SARIMAX).
+- [x] **13 — ML forecaster.** Features, XGBoost, walk-forward, 18 leakage tests.
+- [x] **14 — Scoring.** 29.8% MAE improvement measured, Diebold-Mariano, weather ablation.
+- [x] **15 — Strategy.** Battery arbitrage, frictions, risk report.
+- [ ] **16 — Ship.** Course notebooks 01-13, committed CI fixtures, README polish.
 
-## Built and working
-- `src/ppa/config.py` — paths, market constants (settlement periods, gate closure, timezone),
-  data-source endpoints, six weather sites, `StudyConfig` (window, walk-forward, frictions,
-  regime dates).
-- Makefile targets: `venv ingest panel features forecast backtest report test lint all clean clean-cache`.
-- `.github/workflows/ci.yml` — quality job; pipeline job runs end-to-end on a committed fixture window.
+## Measured results (reports/metrics.json)
+- Forecast: XGBoost MAE **27.230** vs seasonal-naive **38.800** = **29.8% improvement**,
+  over 77,109 out-of-sample half-hours in 54 folds. DM statistic -28.35, p = 7.6e-177.
+- Strategy: 1 MW / 2 MWh battery. xgb **130,603 GBP** (Sharpe 10.01, CI [8.36, 13.04]),
+  naive 85,104, oracle 215,828. Uplift over naive **+53.5%**; captures 60.5% of oracle.
 
 ## Known open items
-- `tests/fixtures/` is empty. Session 9 must commit a short real window (2024-01-01 →
-  2024-03-31) so CI can run the pipeline without network.
-- `reports/metrics.json` does not exist yet; every entry in RESUME_CLAIMS.md is UNVERIFIED.
+- Course notebooks 01-13 not yet written (lesson 00 is done).
+- `tests/fixtures/` is empty — CI's pipeline job needs a committed short window so it can
+  run end to end without hitting Elexon/NESO.
 - No GitHub remote yet.
 
 ## Decisions made (don't relitigate)
-- **`APXMIDP`, not `N2EXMIDP`** — verified live: N2EX returns zero prices before ~2020, which
-  would silently poison the early training window.
-- **Study window 2019-01-01 → 2025-06-30** — deliberately spans calm, crisis and
-  normalisation so the regime split is meaningful rather than decorative.
-- **Gate closure is a single constant** (`DAY_AHEAD_GATE_CLOSURE_LOCAL`) imported everywhere.
-  Two modules disagreeing about the information set is the classic silent backtest bug.
-- **Network tests are marked and excluded from CI.** CI must not fail because Elexon is down.
-- Raw API responses are cached to parquet under `data/raw/` and gitignored.
+- **`APXMIDP`, not `N2EXMIDP`** — the latter returns zeros before ~2020.
+- **Elexon caps ranges at 7 days**, documented only in its 400 response body.
+- **`price_lag_1d` is banned.** The same period on T-1 is up to 13 hours after gate closure.
+  Its absence is asserted in `tests/test_no_leakage.py`.
+- **Headline baseline declared before fitting** (`naive.HEADLINE_BASELINE`).
+- **Battery arbitrage, not a synthetic spread.** The first design traded "forecast minus
+  seasonal naive" against "realised minus seasonal naive" and scored Sharpe 50 — there is
+  no instrument with that payoff. Do not reintroduce it.
+- **Daily annualisation, sqrt(365.25).** The battery cycles once a day; treating its four
+  charge periods as independent bets inflated Sharpe sevenfold.
+- **Weather is archive outturn, not a forecast.** Stated everywhere and bracketed by
+  `make forecast-ablation`.

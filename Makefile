@@ -39,11 +39,18 @@ backtest: forecast ## Turn forecasts into a battery schedule and backtest it
 report: backtest forecast-ablation ## Write reports/metrics.json and reports/report.html
 	$(PY) -m ppa.report.build_report
 
+notebooks: ## Regenerate .ipynb lessons from notebooks/_src/*.py (no outputs)
+	$(PY) tools/py2nb.py
+
+notebooks-check: notebooks ## Execute every lesson end to end; fails on any cell error
+	MPLBACKEND=Agg .venv/bin/jupyter nbconvert --to notebook --execute \
+		--ExecutePreprocessor.timeout=1800 --output-dir=/tmp/ppa-nb notebooks/*.ipynb
+
 test: ## Run the test suite (network tests excluded)
 	$(PY) -m pytest -m "not network"
 
 lint: ## ruff + mypy
-	.venv/bin/ruff check src tests
+	.venv/bin/ruff check src tests tools
 	.venv/bin/mypy
 
 all: report test ## Full reproducible pipeline
@@ -57,4 +64,4 @@ clean: ## Remove derived data and reports (keeps the raw API cache and the venv)
 clean-cache: ## Also drop the raw API cache — next ingest refetches everything
 	rm -rf data/raw/*
 
-.PHONY: help venv ingest panel features forecast forecast-ablation backtest report test lint all clean clean-cache
+.PHONY: help venv ingest panel features forecast forecast-ablation backtest report notebooks notebooks-check test lint all clean clean-cache

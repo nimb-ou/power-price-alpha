@@ -5,12 +5,19 @@ strategy built on it.
 
 **Measured over 77,109 out-of-sample half-hours (2021-01 → 2025-06), 54 expanding-window folds:**
 
-| | MAE | vs seasonal naive |
+| | MAE | XGBoost improvement |
 |---|---|---|
-| **XGBoost** | **27.23** | **−29.8%** |
-| seasonal naive (declared baseline) | 38.80 | — |
+| **XGBoost** | **27.23** | — |
+| `same_period_two_days_ago` (strongest baseline) | 34.95 | **−22.1%** |
+| `same_period_last_week` (declared baseline) | 38.80 | −29.8% |
 
 Diebold-Mariano statistic −28.35 (p ≈ 7.6e-177, Newey-West).
+
+**Quote 22%, not 30%.** The declared baseline is the literature-standard one and was fixed in
+code before any model was fitted — but it is not the *hardest* baseline on this data. Against
+the strongest one the improvement is 22.1%, and re-running with every weather feature removed
+gives 22.1% as well. Two independent stress tests landing on the same number is the reason to
+trust it.
 
 A 1 MW / 2 MWh battery scheduled from those forecasts, settled against realised prices with
 frictions on both legs, earns **130,603 GBP** over the period against **85,104** for the same
@@ -79,8 +86,10 @@ aggregates. A real deployment would use the day-ahead *forecast*, which is less 
 the headline number is optimistic by some amount.
 
 Rather than wave that away, `make forecast-ablation` re-runs the entire walk-forward with
-every weather feature removed. Both figures appear in `reports/metrics.json` and in the
-report, bracketing where a real deployment would land.
+every weather feature removed. The result: **22.1%** improvement with no weather at all
+(MAE 30.22, DM −22.90). So the archive advantage is worth at most 7.7 percentage points, and
+a real deployment lands between 22.1% and 29.8% — nearer the top, since day-ahead temperature
+forecasts are accurate and it is wind that is hard.
 
 ## What's where
 

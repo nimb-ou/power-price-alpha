@@ -10,13 +10,31 @@ expanding-window folds.
 
 ### The corrected bullets
 
-The resume says *"cutting forecast error by 18%"*. The measured figure is **29.8%** with
-weather features and **22.1%** with none at all, so the bullet understates the result at
-either end of the honest range. It also describes a "rules-based trading strategy" without
-saying what is traded; the honest version names the asset.
+The resume says *"cutting forecast error by 18%"*. Every honest way of measuring it comes out
+higher, so the bullet understates the result. But **quote 22%, not 30%**, and here is why.
+
+The headline 29.8% is against `same_period_last_week`, the baseline declared in code before
+any model was fitted. It is the standard choice in the literature — but on this data it is
+*not the hardest* baseline available. `same_period_two_days_ago` scores better (MAE 34.952 vs
+38.800), and against that the improvement is **22.1%**.
+
+Two independent stress tests land on the same figure:
+
+| Comparison | Improvement |
+|---|---|
+| vs declared baseline (`same_period_last_week`) | 29.8% |
+| vs **strongest** baseline (`same_period_two_days_ago`) | **22.1%** |
+| vs declared baseline, **all weather features removed** | **22.1%** |
+
+That convergence is the reason to be confident in 22%: it survives both the toughest
+comparison and the removal of the project's one known optimism. It also still comfortably
+exceeds the 18% on the resume.
+
+The second bullet describes a "rules-based trading strategy" without saying what is traded;
+the honest version names the asset.
 
 > - Modeled UK day-ahead electricity spot prices on half-hourly data using lagged demand,
->   weather and seasonality features, **cutting forecast error by 30%** against a seasonal
+>   weather and seasonality features, **cutting forecast error by 22%** against a seasonal
 >   naive baseline under walk-forward validation.
 > - Converted the forecasts into a **battery-arbitrage schedule** and backtested it with
 >   transaction costs and slippage, reporting Sharpe ratio, hit rate and maximum drawdown
@@ -34,8 +52,9 @@ saying what is traded; the honest version names the asset.
 | Seasonality features | Fourier on period-of-day, week, year | `features/build.py::_fourier` | ✅ |
 | Seasonal naive baseline | `same_period_last_week`, MAE 38.800 | `models/naive.py` — declared **before** any fitting | ✅ |
 | Walk-forward validation | 54 folds, expanding, refit every 30 days | `models/walkforward.py` | ✅ |
-| **Forecast error reduction** | **29.8%** (MAE 27.230 vs 38.800) | `metrics.json → forecast.mae_improvement_vs_naive` | ✅ **exceeds the claim** |
-| ...with no weather at all | **22.1%** (MAE 30.224) | `metrics.json → weather_ablation` | ✅ **still exceeds it** |
+| **Forecast error reduction** | **29.8%** vs the declared baseline (MAE 27.230 vs 38.800) | `metrics.json → forecast.mae_improvement_vs_naive` | ✅ |
+| ...vs the *strongest* baseline | **22.1%** (vs `same_period_two_days_ago`, MAE 34.952) | `metrics.json → forecast.models` | ✅ **the number to quote** |
+| ...with no weather features at all | **22.1%** (MAE 30.224) | `metrics.json → weather_ablation` | ✅ |
 | Statistically significant | Diebold-Mariano −28.35, p = 7.6e-177 (Newey-West) | `eval/metrics.py::diebold_mariano` | ✅ |
 | No look-ahead | 18 tests; `price_lag_1d` deliberately absent | `tests/test_no_leakage.py` | ✅ |
 | Settlement calendar correct | 46/48/50-period days, 13 transitions | `data/calendar.py`; 32 tests | ✅ |
@@ -80,9 +99,9 @@ would earn** against the naive forecast's 39.4%.
 |---|---|
 | **"A Sharpe of 10?"** | It is *physical arbitrage*, not market timing. The intraday peak-to-trough spread is almost always positive, so the battery profits most days regardless of forecast quality — the naive schedule alone scores 8.09. The forecast's real contribution is the uplift over that, not the headline. |
 | "Is this actually day-ahead, or are you peeking?" | Gate closure is a single constant. `price_lag_1d` is deliberately absent because the same period on T-1 is up to 13 hours *after* the decision. 18 tests assert every feature's source timestamp precedes its decision time. |
-| "What baseline? Seasonal naive means five things." | `same_period_last_week`, declared in `models/naive.py` before any model was fitted. Two alternatives are scored alongside it, and one of them (`last_known_morning_shape`) actually *beats* it — reported anyway. |
+| "What baseline? Seasonal naive means five things." | `same_period_last_week`, declared in `models/naive.py` before any model was fitted. Two alternatives are scored alongside it — and one of them, `same_period_two_days_ago`, is **stronger** than the one I declared. So I quote the improvement against *that* (22.1%) rather than the more flattering 29.8%. Declaring the baseline in advance is the discipline; reporting against the toughest one is the honesty. |
 | "48 periods a day?" | 46, 48 or 50. `data/calendar.py`, 32 tests, all 13 clock changes in the window. |
-| **"How much of the 30% is the weather cheat?"** | Measured, not guessed. Weather comes from the Open-Meteo *archive* (outturn), not a real day-ahead forecast. Re-running with **every weather feature removed** still gives **22.1%** (DM −22.90, p = 4.7e-116). So the archive advantage is at most 7.7 percentage points, and a real deployment lands between 22.1% and 29.8% — closer to the top, since day-ahead temperature forecasts are accurate. **Both ends of that bracket exceed the 18% on the resume.** |
+| **"How much of it is the weather cheat?"** | Measured, not guessed. Weather comes from the Open-Meteo *archive* (outturn), not a real day-ahead forecast. Re-running with **every weather feature removed** still gives **22.1%** (DM −22.90, p = 4.7e-116). So the archive advantage is at most 7.7 percentage points, and a real deployment lands between 22.1% and 29.8% — closer to the top, since day-ahead temperature forecasts are accurate. **Both ends exceed the 18% on the resume**, and the lower end coincides exactly with the strongest-baseline figure. |
 | "Does the edge survive costs?" | Frictions consume a small share of gross; a zero-friction run is reported alongside. |
 | "Could you actually run this?" | Not as-is. Not modelled: battery degradation and cycle life, state-of-charge constraints beyond one daily cycle, imbalance exposure, market impact, grid connection charges, and the fact that a real auction takes a bid curve rather than a point forecast. |
 | "What did you get wrong?" | The first strategy design traded a synthetic spread and produced a Sharpe of 50. There is no instrument with that payoff, so the P&L was fictional. It was replaced with the battery. The commit history has both. |

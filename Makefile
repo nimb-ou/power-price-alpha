@@ -12,8 +12,21 @@ JUPYTER ?= .venv/bin/jupyter
 START ?= 2019-01-01
 END   ?= 2025-06-30
 
+# CI overrides these to run a genuine but scaled-down walk-forward on the
+# committed fixture window.
+TRAIN_DAYS ?= 730
+REFIT_DAYS ?= 30
+
+PROC := data/processed
+PANEL      := $(PROC)/panel.parquet
+FEATURES   := $(PROC)/features.parquet
+FORECAST   := $(PROC)/walkforward_predictions.parquet
+ABLATION   := $(PROC)/walkforward_predictions_no_weather.parquet
+BACKTEST   := $(PROC)/backtest.parquet
+REPORT     := reports/metrics.json
+
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 venv: ## Create the virtualenv and install dependencies
 	python3 -m venv .venv
@@ -30,31 +43,47 @@ ingest: ## Download prices, demand and weather into data/raw (cached; safe to re
 	$(PY) -m ppa.ingest.neso      --start $(START) --end $(END)
 	$(PY) -m ppa.ingest.openmeteo --start $(START) --end $(END)
 
-# Deliberately does NOT depend on `ingest`. Data reaches data/raw either from
-# `make ingest` (network) or `make fixtures` (committed sample), and the loaders
-# raise a clear "run make ingest first" if neither has happened.
-panel: ## Assemble the half-hourly panel with quality checks
+# --- the pipeline -----------------------------------------------------------
+#
+# Each stage is a real file target depending on the previous stage's output, so
+# make skips work that is already done. This matters here more than in most
+# projects: the walk-forward takes ~10 minutes, and with phony targets a plain
+# `make report` re-ran it three times — once for `backtest`, once for
+# `forecast-ablation`, and once more for `report` — because a phony prerequisite
+# is always considered out of date.
+#
+# `panel` deliberately does NOT depend on `ingest`. Data reaches data/raw from
+# either `make ingest` (network) or `make fixtures` (committed sample), and the
+# loaders raise a clear "run make ingest first" if neither has happened.
+
+$(PANEL):
 	$(PY) -m ppa.data.assemble --start $(START) --end $(END)
 
-features: panel ## Build the day-ahead feature matrix
+$(FEATURES): $(PANEL)
 	$(PY) -m ppa.features.build
 
-# CI overrides these to run a genuine but scaled-down walk-forward on the
-# committed fixture window.
-TRAIN_DAYS ?= 730
-REFIT_DAYS ?= 30
-
-forecast: features ## Walk-forward backtest: naive, SARIMAX, XGBoost
+$(FORECAST): $(FEATURES)
 	$(PY) -m ppa.models.walkforward --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
-forecast-ablation: features ## Re-run the walk-forward with weather features removed
+$(ABLATION): $(FEATURES)
 	$(PY) -m ppa.models.walkforward --no-weather --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
-backtest: forecast ## Turn forecasts into a battery schedule and backtest it
+$(BACKTEST): $(FORECAST)
 	$(PY) -m ppa.strategy.backtest
 
-report: backtest forecast-ablation ## Write reports/metrics.json and reports/report.html
+$(REPORT): $(BACKTEST) $(ABLATION)
 	$(PY) -m ppa.report.build_report
+
+panel: $(PANEL)                       ## Assemble the half-hourly panel with quality checks
+features: $(FEATURES)                 ## Build the day-ahead feature matrix
+forecast: $(FORECAST)                 ## Walk-forward backtest: naive, SARIMAX, XGBoost
+forecast-ablation: $(ABLATION)        ## Re-run the walk-forward with weather features removed
+backtest: $(BACKTEST)                 ## Turn forecasts into a battery schedule and backtest it
+report: $(REPORT)                     ## Write reports/metrics.json and reports/report.html
+
+rebuild: clean report                 ## Force the whole pipeline to re-run
+
+# --- development ------------------------------------------------------------
 
 notebooks: ## Regenerate .ipynb lessons from notebooks/_src/*.py (no outputs)
 	$(PY) tools/py2nb.py
@@ -81,4 +110,5 @@ clean: ## Remove derived data and reports (keeps the raw API cache and the venv)
 clean-cache: ## Also drop the raw API cache — next ingest refetches everything
 	rm -rf data/raw/*
 
-.PHONY: help venv fixtures ingest panel features forecast forecast-ablation backtest report notebooks notebooks-check test lint all clean clean-cache
+.PHONY: help venv fixtures ingest panel features forecast forecast-ablation \
+        backtest report rebuild notebooks notebooks-check test lint all clean clean-cache

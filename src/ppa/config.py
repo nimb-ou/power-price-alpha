@@ -7,10 +7,39 @@ that silently invalidates a backtest if two modules disagree.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+
+def _find_root() -> Path:
+    """Where `data/`, `artifacts/` and `reports/` live.
+
+    Three cases, in order:
+
+    1. `PPA_ROOT` is set — always wins.
+    2. An editable install from a source checkout: `src/ppa/config.py` sits two
+       levels below the repo, and the repo has a `pyproject.toml`.
+    3. Anything else — a wheel in site-packages, where `parents[2]` is
+       `.../lib/python3.12` and emphatically not a repo. Fall back to cwd.
+
+    Case 2 has a sharp edge worth knowing about: under `pip install -e .` this
+    resolves to the *original* checkout no matter what directory you run from.
+    So running a second clone against the same virtualenv writes into the first
+    one's `reports/`. `PPA_ROOT` is the escape hatch, and it is how the CI-
+    equivalent run is kept isolated locally.
+    """
+    if override := os.environ.get("PPA_ROOT"):
+        return Path(override).resolve()
+
+    candidate = Path(__file__).resolve().parents[2]
+    if (candidate / "pyproject.toml").exists():
+        return candidate
+
+    return Path.cwd()
+
+
+REPO_ROOT = _find_root()
 
 DATA_RAW = REPO_ROOT / "data" / "raw"
 DATA_PROCESSED = REPO_ROOT / "data" / "processed"

@@ -45,7 +45,7 @@ jobs:
         # exercises a 50-period day.
         run: |
           make fixtures
-          make report \
+          make report PY=python \
             START=2024-07-01 END=2024-12-31 \
             TRAIN_DAYS=90 REFIT_DAYS=30
       - name: Show measured metrics

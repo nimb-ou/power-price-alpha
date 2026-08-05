@@ -1,4 +1,9 @@
-PY := .venv/bin/python
+# Overridable so CI can use the interpreter it installed into, rather than a
+# virtualenv that only exists on a developer machine.
+PY ?= .venv/bin/python
+RUFF ?= .venv/bin/ruff
+MYPY ?= .venv/bin/mypy
+JUPYTER ?= .venv/bin/jupyter
 
 .DEFAULT_GOAL := help
 
@@ -25,7 +30,10 @@ ingest: ## Download prices, demand and weather into data/raw (cached; safe to re
 	$(PY) -m ppa.ingest.neso      --start $(START) --end $(END)
 	$(PY) -m ppa.ingest.openmeteo --start $(START) --end $(END)
 
-panel: ingest ## Assemble the half-hourly panel with quality checks
+# Deliberately does NOT depend on `ingest`. Data reaches data/raw either from
+# `make ingest` (network) or `make fixtures` (committed sample), and the loaders
+# raise a clear "run make ingest first" if neither has happened.
+panel: ## Assemble the half-hourly panel with quality checks
 	$(PY) -m ppa.data.assemble --start $(START) --end $(END)
 
 features: panel ## Build the day-ahead feature matrix
@@ -52,17 +60,17 @@ notebooks: ## Regenerate .ipynb lessons from notebooks/_src/*.py (no outputs)
 	$(PY) tools/py2nb.py
 
 notebooks-check: notebooks ## Execute every lesson end to end; fails on any cell error
-	MPLBACKEND=Agg .venv/bin/jupyter nbconvert --to notebook --execute \
+	MPLBACKEND=Agg $(JUPYTER) nbconvert --to notebook --execute \
 		--ExecutePreprocessor.timeout=1800 --output-dir=/tmp/ppa-nb notebooks/*.ipynb
 
 test: ## Run the test suite (network tests excluded)
 	$(PY) -m pytest -m "not network"
 
 lint: ## ruff + mypy
-	.venv/bin/ruff check src tests tools
-	.venv/bin/mypy
+	$(RUFF) check src tests tools
+	$(MYPY)
 
-all: report test ## Full reproducible pipeline
+all: ingest report test ## Full reproducible pipeline (fetches data)
 	@echo "--- reports/metrics.json ---"
 	@cat reports/metrics.json
 

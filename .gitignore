@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Data and generated artifacts.
+# data/raw is the API cache — large, regenerable, and rate-limit-expensive to
+# refetch, so it stays local rather than in git.
+data/raw/*
+data/processed/*
+artifacts/*
+reports/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!artifacts/.gitkeep
+!reports/.gitkeep
+
+# macOS
+.DS_Store

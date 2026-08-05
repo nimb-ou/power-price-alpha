@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt && pip install -e .
+      - name: Lint
+        run: ruff check src tests
+      - name: Type check
+        run: mypy
+      - name: Tests
+        # Network tests are excluded: CI must not depend on Elexon/NESO uptime.
+        # Everything else — calendar arithmetic, leakage checks, backtest
+        # mechanics — runs against fixtures committed under tests/fixtures/.
+        run: pytest -m "not network" --cov=ppa --cov-report=term-missing
+
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt && pip install -e .
+      - name: End-to-end on the fixture window
+        # A short committed window, so the whole chain (panel → features →
+        # walk-forward → backtest → report) is exercised without hitting APIs.
+        run: make report START=2024-01-01 END=2024-03-31 PPA_USE_FIXTURES=1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: reports/

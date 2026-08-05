@@ -35,10 +35,21 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt && pip install -e .
-      - name: End-to-end on the fixture window
-        # A short committed window, so the whole chain (panel → features →
-        # walk-forward → backtest → report) is exercised without hitting APIs.
-        run: make report START=2024-01-01 END=2024-03-31 PPA_USE_FIXTURES=1
+      - name: End-to-end on the committed fixture window
+        # Six months of real data (2024-07 to 2024-12) committed under
+        # tests/fixtures, so the whole chain — panel, features, walk-forward,
+        # backtest, report — runs without touching Elexon or NESO. A red build
+        # means our code broke, never that a public API had a bad morning.
+        #
+        # The window deliberately spans the October clock change, so every push
+        # exercises a 50-period day.
+        run: |
+          make fixtures
+          make report \
+            START=2024-07-01 END=2024-12-31 \
+            TRAIN_DAYS=90 REFIT_DAYS=30
+      - name: Show measured metrics
+        run: cat reports/metrics.json
       - uses: actions/upload-artifact@v4
         with:
           name: report

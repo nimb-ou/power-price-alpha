@@ -16,6 +16,10 @@ venv: ## Create the virtualenv and install dependencies
 	.venv/bin/pip install -r requirements.txt
 	.venv/bin/pip install -e .
 
+fixtures: ## Copy the committed test fixture into data/raw (offline; used by CI)
+	mkdir -p data/raw
+	cp -R tests/fixtures/raw/. data/raw/
+
 ingest: ## Download prices, demand and weather into data/raw (cached; safe to re-run)
 	$(PY) -m ppa.ingest.elexon    --start $(START) --end $(END)
 	$(PY) -m ppa.ingest.neso      --start $(START) --end $(END)
@@ -27,11 +31,16 @@ panel: ingest ## Assemble the half-hourly panel with quality checks
 features: panel ## Build the day-ahead feature matrix
 	$(PY) -m ppa.features.build
 
+# CI overrides these to run a genuine but scaled-down walk-forward on the
+# committed fixture window.
+TRAIN_DAYS ?= 730
+REFIT_DAYS ?= 30
+
 forecast: features ## Walk-forward backtest: naive, SARIMAX, XGBoost
-	$(PY) -m ppa.models.walkforward
+	$(PY) -m ppa.models.walkforward --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
 forecast-ablation: features ## Re-run the walk-forward with weather features removed
-	$(PY) -m ppa.models.walkforward --no-weather
+	$(PY) -m ppa.models.walkforward --no-weather --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
 backtest: forecast ## Turn forecasts into a battery schedule and backtest it
 	$(PY) -m ppa.strategy.backtest
@@ -64,4 +73,4 @@ clean: ## Remove derived data and reports (keeps the raw API cache and the venv)
 clean-cache: ## Also drop the raw API cache — next ingest refetches everything
 	rm -rf data/raw/*
 
-.PHONY: help venv ingest panel features forecast forecast-ablation backtest report notebooks notebooks-check test lint all clean clean-cache
+.PHONY: help venv fixtures ingest panel features forecast forecast-ablation backtest report notebooks notebooks-check test lint all clean clean-cache

@@ -61,6 +61,9 @@ The first run downloads ~6.5 years of half-hourly data from three keyless public
 caches it to parquet (~350 requests, a few minutes). Subsequent runs are offline. It ends by
 printing `reports/metrics.json` and writing `reports/report.html`.
 
+The pipeline is incremental — re-running skips any stage whose inputs have not changed, which
+matters because the walk-forward takes about ten minutes. `make rebuild` forces the lot.
+
 ```bash
 open reports/report.html
 ```

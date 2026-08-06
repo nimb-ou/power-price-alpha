@@ -29,7 +29,9 @@ import argparse
 import json
 import logging
 import math
+import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,34 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
     return value
+
+
+def _test_count() -> int | None:
+    """How many tests this suite actually has, by asking pytest.
+
+    Hardcoded here first, and it went stale within a day — the site advertised
+    117 tests against a suite that had grown to 201. A number that has to be
+    remembered is a number that will be wrong, which is the same argument that
+    put every other figure on the site behind an exporter.
+    """
+    root = Path(__file__).resolve().parents[1]
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", "not network"],
+            cwd=root, capture_output=True, text=True, timeout=180,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+    # Two output shapes depending on verbosity settings in pyproject: a summary
+    # line "N tests collected", or one "path/to/test_x.py: N" line per file.
+    # Handle both rather than assuming, since the shape is config-dependent and
+    # this repo produces the second one.
+    if match := re.search(r"(\d+)\s+tests? collected", result.stdout):
+        return int(match.group(1))
+
+    per_file = re.findall(r"^\S+\.py:\s*(\d+)$", result.stdout, re.MULTILINE)
+    return sum(int(n) for n in per_file) if per_file else None
 
 
 def _git_commit() -> str | None:
@@ -209,7 +239,7 @@ def build() -> dict[str, Any]:
 
     return {
         "generated_from_commit": _git_commit(),
-        "meta": {"tests": 117},
+        "meta": {"tests": _test_count()},
         "study": report.get("study", {}),
         "headline": {
             "n_predictions": forecast["n_predictions"],

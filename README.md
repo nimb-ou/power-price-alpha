@@ -1,5 +1,7 @@
 # Power Price Alpha
 
+**[Interactive writeup → nimb-ou.github.io/power.html](https://nimb-ou.github.io/power.html)** — 27 labelled sample days at half-hourly resolution, the prediction intervals before and after conformal calibration, and the battery P&L curve.
+
 Half-hourly GB electricity price forecasting, and an honest backtest of a battery-arbitrage
 strategy built on it.
 

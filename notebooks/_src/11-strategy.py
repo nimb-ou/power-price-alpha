@@ -291,4 +291,5 @@ plt.show()
 #
 # ---
 #
-# **Next:** `course/14-reproducibility.md` — `make all`, CI, and publishing the report.
+# **Next:** `12-backtest-engine.ipynb` — charging the schedule for the frictions it would
+# really pay.

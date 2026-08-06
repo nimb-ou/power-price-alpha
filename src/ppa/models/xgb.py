@@ -64,6 +64,53 @@ def fit_predict(
     return model.predict(test[features]), model
 
 
+# The interval the strategy and the report both use. Deliberately not 5/95: at
+# 90% nominal coverage an empirical 88% is a readable miss, whereas at 99% the
+# tail is so thin that 77k observations barely pin it down.
+QUANTILES: tuple[float, ...] = (0.1, 0.5, 0.9)
+
+
+def fit_predict_quantiles(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    features: list[str],
+    target: str = "price",
+    quantiles: tuple[float, ...] = QUANTILES,
+    params: dict[str, Any] | None = None,
+) -> np.ndarray:
+    """Fit one multi-quantile model and predict all quantiles at once.
+
+    Returned shape is `(len(test), len(quantiles))`, column order matching
+    `quantiles`.
+
+    One model rather than three. Fitting separate models per quantile is the
+    common recipe and it has a defect that shows up immediately on power prices:
+    nothing couples the three fits, so on a volatile evening the P10 model and
+    the P90 model can cross, and an interval whose lower bound exceeds its upper
+    bound is not a thing you can hand to a trading desk. XGBoost's multi-quantile
+    objective fits them jointly against a shared tree structure, which does not
+    make crossing impossible but makes it rare — and `walkforward.score` counts
+    the crossings that remain rather than assuming there are none.
+
+    The point forecast still comes from the separate `reg:absoluteerror` model.
+    The P50 here is a *median* fitted under pinball loss; the two land close but
+    are not the same estimator, and reporting a headline MAE from whichever one
+    happened to win would be exactly the kind of quiet metric-shopping the rest
+    of this repo is built to avoid.
+    """
+    model = XGBRegressor(
+        **{
+            **DEFAULT_PARAMS,
+            "objective": "reg:quantileerror",
+            "quantile_alpha": np.array(quantiles),
+            **(params or {}),
+        }
+    )
+    model.fit(train[features], train[target])
+    predicted: np.ndarray = np.asarray(model.predict(test[features]))
+    return predicted.reshape(len(test), len(quantiles))
+
+
 def importance(model: XGBRegressor, features: list[str]) -> pd.DataFrame:
     return (
         pd.DataFrame({"feature": features, "gain": model.feature_importances_})

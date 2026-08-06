@@ -220,5 +220,8 @@ print(json.dumps({k: v for k, v in full["study"].items()}, indent=2))
 #
 # ---
 #
-# That is the course. `course/14-reproducibility.md` covers `make all` and CI; after that,
-# `RESUME_CLAIMS.md` is the document to reread before an interview.
+# **Next:** `14-forecast-uncertainty.ipynb` — putting an honest interval around the point
+# forecast, which is what a desk asks immediately after "how accurate is it?".
+#
+# After that `course/15-reproducibility.md` covers `make all` and CI, and `RESUME_CLAIMS.md`
+# is the document to reread before an interview.

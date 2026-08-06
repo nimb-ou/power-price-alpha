@@ -139,6 +139,61 @@ def by_period_of_day(
     return pd.DataFrame(rows)
 
 
+def pinball(y_true: Any, y_pred: Any, quantile: float) -> float:
+    """Pinball (quantile) loss — the proper scoring rule for a quantile.
+
+    Asymmetric on purpose: at q=0.1 an over-prediction is penalised 9x an
+    under-prediction of the same size, which is what forces the estimate down to
+    the tenth percentile instead of the mean. Averaging pinball across quantiles
+    approximates CRPS, so it is also the single number to compare two whole
+    predictive distributions with.
+    """
+    t, p = _aligned(y_true, y_pred)
+    if not len(t):
+        return float("nan")
+    error = t - p
+    return float(np.mean(np.maximum(quantile * error, (quantile - 1) * error)))
+
+
+def interval_score(
+    y_true: Any, lower: Any, upper: Any, alpha: float = 0.2
+) -> dict[str, float]:
+    """Coverage, width, and the Winkler score for a central prediction interval.
+
+    Coverage alone is not enough and is the number people quote. An interval
+    from minus infinity to infinity has perfect coverage and no content, so
+    width has to be reported beside it. The Winkler score combines the two —
+    width, plus a penalty proportional to how far outside a miss landed — and is
+    the one number that cannot be gamed by widening.
+
+    `alpha=0.2` corresponds to a nominal 80% interval, i.e. the P10-P90 pair.
+    """
+    t, lo = _aligned(y_true, lower)
+    _, hi = _aligned(y_true, upper)
+    if not len(t):
+        return {"coverage": float("nan"), "mean_width": float("nan"),
+                "winkler": float("nan"), "n": 0, "crossings": 0}
+
+    width = hi - lo
+    below = t < lo
+    above = t > hi
+    penalty = (2 / alpha) * (np.where(below, lo - t, 0.0) + np.where(above, t - hi, 0.0))
+
+    return {
+        "n": int(len(t)),
+        "nominal_coverage": float(1 - alpha),
+        "coverage": float(np.mean(~(below | above))),
+        "mean_width": float(np.mean(width)),
+        "median_width": float(np.median(width)),
+        "winkler": float(np.mean(width + penalty)),
+        "breaches_low": int(below.sum()),
+        "breaches_high": int(above.sum()),
+        # Quantile crossing: an upper bound below its lower bound. Should be
+        # zero or near it; counted rather than assumed. See xgb.fit_predict_quantiles.
+        "crossings": int(np.sum(hi < lo)),
+    }
+
+
 def bootstrap_mae_ci(
     y_true: Any,
     y_pred: Any,

@@ -65,8 +65,11 @@ $(FEATURES): $(PANEL)
 $(FORECAST): $(FEATURES)
 	$(PY) -m ppa.models.walkforward --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
+# --no-quantiles: the ablation exists to bracket the *point* forecast against
+# the optimism of using outturn weather. Fitting the interval model here too
+# would double its runtime to bracket a number nothing reads.
 $(ABLATION): $(FEATURES)
-	$(PY) -m ppa.models.walkforward --no-weather --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
+	$(PY) -m ppa.models.walkforward --no-weather --no-quantiles --initial-train-days $(TRAIN_DAYS) --refit-days $(REFIT_DAYS)
 
 $(BACKTEST): $(FORECAST)
 	$(PY) -m ppa.strategy.backtest

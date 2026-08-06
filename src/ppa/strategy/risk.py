@@ -23,7 +23,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ppa.config import STUDY
+from ppa.eval.regimes import label_regime
+
+# Re-exported: regime labelling moved to `eval/regimes.py` when the forecast
+# layer needed it too, but `risk.label_regime` is what the tests and notebooks
+# already call.
+__all__ = ["label_regime"]
 
 DAYS_PER_YEAR = 365.25
 ANNUALISATION = float(np.sqrt(DAYS_PER_YEAR))
@@ -106,30 +111,6 @@ def bootstrap_sharpe_ci(
         return [float("nan"), float("nan")]
     lo, hi = np.quantile(clean, [alpha / 2, 1 - alpha / 2])
     return [float(lo), float(hi)]
-
-
-def label_regime(dates: pd.Series) -> pd.Series:
-    """Calm / volatile / post-crisis, split at fixed dates declared in config.
-
-    The dates are chosen from market history, not from the strategy's results.
-    Picking regime boundaries after seeing where a strategy worked is a
-    well-known way to manufacture a story.
-    """
-    stamps = pd.to_datetime(dates)
-    if stamps.dt.tz is not None:
-        stamps = stamps.dt.tz_convert(None)
-
-    start = pd.Timestamp(STUDY.volatile_start)
-    end = pd.Timestamp(STUDY.volatile_end)
-
-    return pd.Series(
-        np.select(
-            [stamps < start, (stamps >= start) & (stamps <= end)],
-            ["calm_pre_crisis", "volatile_gas_crisis"],
-            default="post_crisis",
-        ),
-        index=dates.index,
-    )
 
 
 def by_regime(frame: pd.DataFrame, pnl_col: str = "pnl") -> dict[str, dict[str, Any]]:

@@ -23,6 +23,7 @@ COURSE = ROOT / "course"
 
 # `01-ingest-prices.ipynb` or `course/00-gb-power-market.md`
 LINK = re.compile(r"`((?:course/)?\d{2}-[a-z0-9-]+\.(?:ipynb|md))`")
+NUMBERED = re.compile(r"^\d{2}-")
 
 
 def lesson_sources() -> list[Path]:
@@ -30,11 +31,26 @@ def lesson_sources() -> list[Path]:
 
 
 def markdown_lessons() -> list[Path]:
-    return sorted(COURSE.glob("*.md"))
+    """Numbered lessons only.
+
+    `course/` also holds the syllabus and the worked solutions. Those are course
+    material but not lessons, and globbing `*.md` swept them into every
+    per-lesson assertion below — including the one requiring a "Lesson NN —"
+    title, which they correctly do not have.
+    """
+    return sorted(p for p in COURSE.glob("*.md") if NUMBERED.match(p.name))
+
+
+def supporting_documents() -> list[Path]:
+    return [COURSE / "README.md", COURSE / "solutions.md"]
 
 
 def all_lesson_files() -> list[Path]:
     return lesson_sources() + markdown_lessons()
+
+
+def all_course_files() -> list[Path]:
+    return all_lesson_files() + supporting_documents()
 
 
 def test_there_are_lessons() -> None:
@@ -56,7 +72,7 @@ def test_no_orphan_notebooks() -> None:
         assert notebook.stem in sources, f"{notebook.name} has no source in notebooks/_src"
 
 
-@pytest.mark.parametrize("lesson", all_lesson_files(), ids=lambda p: p.name)
+@pytest.mark.parametrize("lesson", all_course_files(), ids=lambda p: p.name)
 def test_cross_references_resolve(lesson: Path) -> None:
     """Every `NN-name.ipynb` or `course/NN-name.md` reference must exist."""
     for target in LINK.findall(lesson.read_text()):
@@ -125,3 +141,30 @@ def test_lesson_numbers_are_unique() -> None:
 def test_readme_points_at_the_first_lesson() -> None:
     readme = (ROOT / "README.md").read_text()
     assert "course/00-gb-power-market.md" in readme
+
+
+def test_the_syllabus_and_solutions_exist() -> None:
+    """The two documents a reader arriving cold needs first and last."""
+    for path in supporting_documents():
+        assert path.exists(), f"{path.name} missing from course/"
+        assert len(path.read_text()) > 1000, f"{path.name} looks like a stub"
+
+
+@pytest.mark.parametrize("lesson", all_lesson_files(), ids=lambda p: p.name)
+def test_every_lesson_has_exercises(lesson: Path) -> None:
+    """A lesson without exercises is a tutorial, which is a weaker thing."""
+    assert "Exercise" in lesson.read_text(), f"{lesson.name} has no exercises"
+
+
+def test_solutions_cover_every_lesson_that_has_exercises() -> None:
+    """Otherwise a reader hits an exercise whose answer was never written.
+
+    Matched on lesson number rather than filename, so renaming a lesson cannot
+    silently orphan its solutions section.
+    """
+    solutions = (COURSE / "solutions.md").read_text()
+    for lesson in all_lesson_files():
+        number = lesson.name[:2]
+        assert re.search(rf"## Lesson {number} —", solutions), (
+            f"solutions.md has no section for lesson {number} ({lesson.name})"
+        )

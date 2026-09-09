@@ -1,9 +1,9 @@
 # Overridable so CI can use the interpreter it installed into, rather than a
 # virtualenv that only exists on a developer machine.
 PY ?= .venv/bin/python
-RUFF ?= .venv/bin/ruff
-MYPY ?= .venv/bin/mypy
-JUPYTER ?= .venv/bin/jupyter
+RUFF ?= $(PY) -m ruff
+MYPY ?= $(PY) -m mypy
+JUPYTER ?= $(PY) -m jupyter
 
 .DEFAULT_GOAL := help
 
